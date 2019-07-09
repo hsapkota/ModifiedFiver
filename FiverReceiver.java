@@ -17,7 +17,7 @@ public class FiverReceiver{
     boolean hasFinishedChecksum =false;
     static AtomicBoolean allTransfersCompleted = new AtomicBoolean(false);
     ChecksumConnector checksumConnector  = new ChecksumConnector();
-    static LinkedBlockingQueue<Item> items = new LinkedBlockingQueue<>(100);
+    static LinkedBlockingQueue<Block> items = new LinkedBlockingQueue<>(100);
     static String baseDir = "/Users/earslan/receivedFiles/";
     LinkedList<DataStorage> data_store = new LinkedList<>();
     boolean debug = false;
@@ -26,8 +26,8 @@ public class FiverReceiver{
     Long numberOfTransfers = 0L;
     Long numberOfCheckSum = 0L;
     Long max_cc = 4L;
-    double ratio_check = 0.1;
-    Long wait_for = 5000L;
+    double ratio_check = 0.05;
+    Long wait_for;
 
 
     public class MonitorThread extends Thread {
@@ -44,7 +44,7 @@ public class FiverReceiver{
         public void run() {
             Thread checksumConnectThread = new Thread(checksumConnector, "checksumConnector");
             checksumConnectThread.start();
-
+            wait_for = 5000L;
             String thread_name;
 
             for(int i=0;i<max_cc;i++) {
@@ -165,6 +165,7 @@ public class FiverReceiver{
         private void saveFile(Socket clientSock) throws IOException, InterruptedException {
             DataInputStream dataInputStream  = new DataInputStream(clientSock.getInputStream());
             INTEGRITY_VERIFICATION_BLOCK_SIZE = dataInputStream.readLong();
+            wait_for = dataInputStream.readLong();
 
             if(startTime == null){
                 startTime = System.currentTimeMillis();
@@ -197,7 +198,7 @@ public class FiverReceiver{
                 long remaining = fileSize;
                 int read = 0;
                 long transferStartTime = System.currentTimeMillis();
-                Item itm = new Item((int) Math.min((int) INTEGRITY_VERIFICATION_BLOCK_SIZE, remaining));
+                Block itm = new Block((int) Math.min((int) INTEGRITY_VERIFICATION_BLOCK_SIZE, remaining));
 
                 while (remaining > 0) {
                     read = dataInputStream.read(buffer, 0, (int) Math.min((long)Math.min(buffer.length, itm.length-itm.till_now), remaining));
@@ -219,7 +220,7 @@ public class FiverReceiver{
                         itm.fileId = fileId;
 
                         items.offer(itm, Long.MAX_VALUE, TimeUnit.MILLISECONDS);
-                        itm = new Item((int) Math.min((int) INTEGRITY_VERIFICATION_BLOCK_SIZE, remaining));
+                        itm = new Block((int) Math.min((int) INTEGRITY_VERIFICATION_BLOCK_SIZE, remaining));
                     }
                     randomAccessFile.write(buffer, 0, read);
 
@@ -286,7 +287,7 @@ public class FiverReceiver{
         }
     }
 
-    class Item {
+    class Block {
         int till_now = 0;
         int length;
         long block_id;
@@ -294,7 +295,7 @@ public class FiverReceiver{
         List<Buffer> byte_array;
 
 
-        Item(int length){
+        Block(int length){
             this.length = length;
             byte_array = new ArrayList<Buffer>();
         }
@@ -353,7 +354,7 @@ public class FiverReceiver{
             Long currentBlockId = 0L;
             while(!hasFinishedChecksum) {
                 try {
-                    Item item = items.poll(100, TimeUnit.MILLISECONDS);
+                    Block item = items.poll(100, TimeUnit.MILLISECONDS);
                     if (item == null) {
                         continue;
                     }

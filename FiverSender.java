@@ -11,8 +11,8 @@ import javax.xml.bind.annotation.adapters.HexBinaryAdapter;
 
 public class FiverSender {
     long INTEGRITY_VERIFICATION_BLOCK_SIZE = 256 * 1024 * 1024;
-    static LinkedBlockingQueue<Item> items = new LinkedBlockingQueue<>(100);
-    static HashMap<String, Item> item_hashmap = new HashMap<>();
+    static LinkedBlockingQueue<Block> items = new LinkedBlockingQueue<>(100);
+    static HashMap<String, Block> item_hashmap = new HashMap<>();
     List<FiverFile> files;
     Long startTime = null;
     boolean debug = false;
@@ -29,7 +29,7 @@ public class FiverSender {
     FiverSender fiver_sender = this;
     int[] ports = {2008, 2009, 2010, 2011, 2012, 2013, 2014};
     LinkedList<DataStorage> data_store = new LinkedList<>();
-    double ratio_check = 0.1;
+    double ratio_check = 0.05;
     Long max_cc = 4L;
     boolean file_empty = false;
     Long lock_until_process = 0L;
@@ -176,7 +176,7 @@ public class FiverSender {
         return String.format("%.1f %sB", bytes / Math.pow(unit, exp), pre);
     }
 
-    public void check_checksums(Item item){
+    public void check_checksums(Block item){
         String key = item.fileId+"-"+item.block_id;
         if(item.hex_checked){
             item_hashmap.remove(key);
@@ -273,7 +273,7 @@ public class FiverSender {
             }
             DataOutputStream dos = new DataOutputStream(s.getOutputStream());
             dos.writeLong(INTEGRITY_VERIFICATION_BLOCK_SIZE);
-
+            dos.writeLong(wait_for);
             if(startTime == null){
                 startTime = System.currentTimeMillis();
             }
@@ -320,7 +320,7 @@ public class FiverSender {
                 Long remaining = currentFile.length;
                 Long offset = 0L;
                 try {
-                    Item itm = new Item((int) Math.min((int) INTEGRITY_VERIFICATION_BLOCK_SIZE, remaining));
+                    Block itm = new Block((int) Math.min((int) INTEGRITY_VERIFICATION_BLOCK_SIZE, remaining));
                     file_empty = false;
 
                     while ((n = fis.read(buffer, 0, (int) Math.min((long)Math.min(buffer.length, itm.length-itm.till_now), remaining))) > 0) {
@@ -345,7 +345,7 @@ public class FiverSender {
                                 checksum_called+=2;
                             }
 
-                            itm = new Item((int) Math.min((int) INTEGRITY_VERIFICATION_BLOCK_SIZE, remaining));
+                            itm = new Block((int) Math.min((int) INTEGRITY_VERIFICATION_BLOCK_SIZE, remaining));
                             offset = currentFile.length - remaining;
 
                         }
@@ -395,7 +395,7 @@ public class FiverSender {
         }
     }
 
-    class Item {
+    class Block {
         int till_now = 0;
         int length;
         long block_id;
@@ -407,7 +407,7 @@ public class FiverSender {
         Long offset;
         List<Buffer> byte_array;
 
-        Item(int length){
+        Block(int length){
             this.length = length;
             byte_array = new ArrayList<Buffer>();
         }
@@ -455,7 +455,7 @@ public class FiverSender {
                         }
                         String key = "" + currentFileId + "-" + currentBlockId;
 
-                        Item itm = item_hashmap.get(key);
+                        Block itm = item_hashmap.get(key);
 
                         if (itm != null) {
                             itm.hex_received = destinationHex;
@@ -471,8 +471,8 @@ public class FiverSender {
                         }
                         if (wait_time <= 0L && (!items.isEmpty() || !files.isEmpty())) {
                             if (checksum_called > 0) {
-                                for (Map.Entry<String, Item> entry : item_hashmap.entrySet()) {
-                                    Item itm = entry.getValue();
+                                for (Map.Entry<String, Block> entry : item_hashmap.entrySet()) {
+                                    Block itm = entry.getValue();
                                     itm.hex_received = "a";
                                     fiver_sender.check_checksums(itm);
                                 }
@@ -529,7 +529,7 @@ public class FiverSender {
             int wait_for = 10;
             while(!hasFinishedChecksum) {
                 try {
-                    Item item = items.poll(100, TimeUnit.MILLISECONDS);
+                    Block item = items.poll(100, TimeUnit.MILLISECONDS);
                     if (item == null) {
                         if(files.isEmpty()){
                             wait_for--;
